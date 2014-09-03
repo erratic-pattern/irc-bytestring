@@ -10,6 +10,7 @@ module Network.IRC.ByteString.Parser
 import Control.Applicative
 import Data.Attoparsec.Char8 as Char8
 import qualified Data.Attoparsec as Word8
+import qualified Data.Attoparsec.Text as T
 import Data.ByteString.Char8 as BS
   (cons, append, intercalate, ByteString, null, concat, pack, unpack)
 import Data.Maybe (fromMaybe)
@@ -129,7 +130,7 @@ params = fromMaybe [] <$> optional
                 <$> satisfy (\c -> isNonWhite c && c /= ':')
                 <*> Char8.takeWhile isNonWhite
 
-mess = spaces >> fromMaybe "" <$> 
+mess = many (satisfy (\c -> isSpace c && not (T.isEndOfLine c))) >> fromMaybe "" <$>
        optional (char ':' >> Word8.takeWhile (not . isEndOfLine))
        <?> "message body"
 
