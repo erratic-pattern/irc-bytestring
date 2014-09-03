@@ -136,5 +136,5 @@ mess = spaces >> fromMaybe "" <$>
        optional (char ':' >> Word8.takeWhile (not . isEndOfLine))
        <?> "message body"
 
-ircLine = IRCMsg <$> optional prefix <*> command <*> params <*> mess
+ircLine = skipSpace >> IRCMsg <$> optional prefix <*> command <*> params <*> mess
           <?> "IRC line"
