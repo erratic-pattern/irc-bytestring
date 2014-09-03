@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Network.IRC.ByteString.Parser
        ( -- |IRC message types
          ServerName, IRCMsg(..), UserInfo(..)
@@ -9,10 +10,10 @@ module Network.IRC.ByteString.Parser
        ) where
 import Control.Applicative
 import Data.Attoparsec.Char8 as Char8
-import qualified Data.Attoparsec as Word8
+import qualified Data.Attoparsec.ByteString as Word8
 import qualified Data.Attoparsec.Text as T
 import Data.ByteString.Char8 as BS
-  (cons, append, intercalate, ByteString, null, concat, pack, unpack)
+  (cons, append, intercalate, ByteString, null, concat)
 import Data.Maybe (fromMaybe)
 import Data.Char (isAlphaNum, isNumber, isAlpha)
 import Prelude hiding (takeWhile)
@@ -39,8 +40,8 @@ toIRCMsg :: ByteString -> Result IRCMsg
 toIRCMsg = parse ircLine
 
 fromIRCMsg :: IRCMsg -> ByteString
-fromIRCMsg msg = BS.concat $ [prefix, command, params, trail, "\r\n"]
-  where prefix = case msgPrefix msg of
+fromIRCMsg msg = BS.concat $ [prefix', command', params', trail, "\r\n"]
+  where prefix' = case msgPrefix msg of
           Nothing -> ""
           Just (Right serv) -> ':' `cons` serv `append` " "
           Just (Left info)  -> ':' `cons` userNick info
@@ -51,10 +52,10 @@ fromIRCMsg msg = BS.concat $ [prefix, command, params, trail, "\r\n"]
               maybeUser  = maybe ""  ('!' `cons`) (userName info)
               maybeHost  = maybe "" ('@' `cons`) (userHost info)
       
-        command = msgCmd msg            
+        command' = msgCmd msg            
         
         paramList = msgParams msg
-        params
+        params'
           | Prelude.null paramList = ""
           | otherwise = ' ' `cons` intercalate " " (msgParams msg)
       
@@ -69,9 +70,10 @@ ircMsg = IRCMsg Nothing
 
 
 --Parsers--
-spaces = skipSpace                       <?> "optional whitespace"
-spaces1 = Word8.skip (==32) >> skipSpace <?> "required whitespace"
+spaces = skipWhile isSpaceNonLine          <?> "optional whitespace"
+spaces1 = satisfy isSpaceNonLine >> spaces <?> "required whitespace"
 
+isSpaceNonLine = (&&) <$> isSpace <*> not . T.isEndOfLine
 isNonWhite c = c /= ' ' && c /= '\r' && c /= '\n' && c /= '\0'
 
 isChanPrefix c = c == '#' || c  == '$'
@@ -130,7 +132,7 @@ params = fromMaybe [] <$> optional
                 <$> satisfy (\c -> isNonWhite c && c /= ':')
                 <*> Char8.takeWhile isNonWhite
 
-mess = many (satisfy (\c -> isSpace c && not (T.isEndOfLine c))) >> fromMaybe "" <$>
+mess = spaces >> fromMaybe "" <$>
        optional (char ':' >> Word8.takeWhile (not . isEndOfLine))
        <?> "message body"
 
