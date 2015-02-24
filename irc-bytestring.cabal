@@ -25,5 +25,9 @@ library
 
 
 
-  exposed-modules: Network.IRC.ByteString.Parser
+  exposed-modules: 
+    Network.IRC.ByteString.Parser
+    Network.IRC.ByteString.Config
+    Network.IRC.ByteString.RFC1459
+    Network.IRC.ByteString.HostParser
 

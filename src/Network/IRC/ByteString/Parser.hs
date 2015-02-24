@@ -1,22 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Network.IRC.ByteString.Parser
-       ( -- |IRC message types
-         ServerName, IRCMsg(..), UserInfo(..)
+       ( -- |Parser configuration
+         IRCParserConfig
+         -- |IRC message types
+       , ServerName, IRCMsg(..), UserInfo(..)
          -- |Conversion functions
-       , toIRCMsg, fromIRCMsg, ircMsg
+       , toIRCMsg, fromIRCMsg
          -- |Attoparsec parser
        , ircLine
        ) where
-import Control.Applicative
 import Data.Attoparsec.Char8 as Char8
 import qualified Data.Attoparsec.ByteString as Word8
-import qualified Data.Attoparsec.Text as T
 import Data.ByteString.Char8 as BS
-  (cons, append, intercalate, ByteString, null, concat)
+  (cons, append, intercalate, ByteString, concat)
 import Data.Maybe (fromMaybe)
-import Data.Char (isAlphaNum, isNumber, isAlpha)
+import Data.Char (isNumber, isAlpha)
+import Control.Applicative
 import Prelude hiding (takeWhile)
+
+import Network.IRC.ByteString.Config
+import Network.IRC.ByteString.Utils
 
 --Types--
 type ServerName = ByteString
@@ -24,23 +28,19 @@ type ServerName = ByteString
 data IRCMsg = IRCMsg { msgPrefix  :: Maybe (Either UserInfo ServerName)
                      , msgCmd     :: ByteString
                      , msgParams  :: [ByteString]
-                     , msgTrail   :: ByteString
+                     , msgTrail   :: Maybe ByteString
                      }
             deriving (Show, Eq, Read)
-
-
+            
+            
 data UserInfo = UserInfo { userNick  :: ByteString
                          , userName  :: Maybe ByteString
                          , userHost  :: Maybe ByteString
                          }
               deriving (Eq, Show, Read)
 
-
-toIRCMsg :: ByteString -> Result IRCMsg
-toIRCMsg = parse ircLine
-
 fromIRCMsg :: IRCMsg -> ByteString
-fromIRCMsg msg = BS.concat $ [prefix', command', params', trail, "\r\n"]
+fromIRCMsg msg = BS.concat $ [prefix', command', params', trail', "\r\n"]
   where prefix' = case msgPrefix msg of
           Nothing -> ""
           Just (Right serv) -> ':' `cons` serv `append` " "
@@ -59,82 +59,55 @@ fromIRCMsg msg = BS.concat $ [prefix', command', params', trail, "\r\n"]
           | Prelude.null paramList = ""
           | otherwise = ' ' `cons` intercalate " " (msgParams msg)
       
-        t = msgTrail msg
-        trail
-          | BS.null t = ""
-          | otherwise = " :" `append` msgTrail msg
+        trail' = case msgTrail msg of
+            Nothing -> ""
+            Just t -> " :" `append` t
+          
+toIRCMsg :: IRCParserConfig -> ByteString -> Result IRCMsg
+toIRCMsg = parse . ircLine 
+          
 
+-- |zero or more spaces as defined by 'isSpace'
+ircSpaces c = skipWhile (isIRCSpace c) <?> "optional space"
 
-ircMsg :: ByteString -> [ByteString] -> ByteString -> IRCMsg
-ircMsg = IRCMsg Nothing
+-- |one or more spaces as defined by 'isSpace'
+ircSpaces1 c = satisfy (isIRCSpace c) 
+               >> skipWhile (isIRCSpace c) 
+               <?> "required space"
 
-
---Parsers--
-spaces = skipWhile isSpaceNonLine          <?> "optional whitespace"
-spaces1 = satisfy isSpaceNonLine >> spaces <?> "required whitespace"
-
-isSpaceNonLine = (&&) <$> isSpace <*> not . T.isEndOfLine
-isNonWhite c = c /= ' ' && c /= '\r' && c /= '\n' && c /= '\0'
-
-isChanPrefix c = c == '#' || c  == '$'
-isChanChar c = isNonWhite c && c /= '\x007' && c /= ','
-
-chan = cons 
-       <$> (satisfy isChanPrefix  <?> "channel prefix")
-       <*> (takeWhile1 isChanChar <?> "channel name")
-
-isNickChar c = isAlphaNum c || isSpecial c
-
-isSpecial c = c == '-' || c == '[' || c == ']' || c == '\\' || c == '`'
-              || c == '^' || c == '{' || c == '}' || c == '_'
-
-nick = BS.cons <$> satisfy isAlpha
-               <*> takeWhile isNickChar 
-               <?> "nick"
-
-isUserChar c = isNonWhite c && c /= '@'
-
-user = takeWhile1 isUserChar <?> "username"
-
-isHostChar c = isAlphaNum c || c == '.' || c == '-'
-
-host = cons
-       <$> satisfy isAlpha
-       <*> takeWhile1 isHostChar 
-       <?> "hostname"
-
-prefix = char ':' *> eitherP (userInfo <* end) (serverName <* end)
-         <?> "prefix"
+               
+ircLine conf = IRCMsg <$> optional (prefix conf) <*> command <*> params conf <*> trail conf <* skipSpace
+          <?> "IRC line" 
+          
+prefix conf = char ':' 
+              *> eitherP (userInfo <* end) (serverName <* end)
+              <?> "prefix"
   where
-    end = spaces1 <|> endOfInput
-    serverName = host
-    userInfo = UserInfo <$> nick 
+    end = ircSpaces1 conf <|> endOfInput
+    nick = nickParser conf <?> "nick"
+    user = userParser conf <?> "user"
+    host = hostParser conf <?> "host"
+    serverName = host <?> "server name"
+    userInfo = UserInfo <$> nick
                         <*> optional (char '!' >> user)
                         <*> optional (char '@' >> host)
-
-command = alpha <|> numeric        
+                        <?> "user info"
+                        
+command = (alpha <|> numeric) <?> "command name"        
   where
     alpha = takeWhile1 isAlpha
-    numeric = 
-      cons 
-      <$> satisfy isNumber
-      <*> (cons
-           <$> satisfy isNumber
-           <*> (cons 
-                <$> satisfy isNumber
-                <*> pure "")
-           )
-      <?> "command name"
+    numeric = n <:> n <:> n <:> pure ""
+        where n = satisfy isNumber
 
-params = fromMaybe [] <$> optional 
-         (spaces1 >> param `sepBy` spaces1) <?> "params list"
-  where param = cons
-                <$> satisfy (\c -> isNonWhite c && c /= ':')
-                <*> Char8.takeWhile isNonWhite
 
-mess = spaces >> fromMaybe "" <$>
-       optional (char ':' >> Word8.takeWhile (not . isEndOfLine))
-       <?> "message body"
+params conf = fromMaybe [] <$> optional 
+              (ircSpaces1 conf >> paramParser conf `sepBy` ircSpaces1 conf) 
+              <?> "params list"
 
-ircLine = IRCMsg <$> optional prefix <*> command <*> params <*> mess <* skipSpace
-          <?> "IRC line" 
+trail conf = ircSpaces conf
+             >> optional (char ':' >> Word8.takeWhile (not . isEndOfLine))
+             <?> "message body"
+ 
+
+
+          
