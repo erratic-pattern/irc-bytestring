@@ -14,6 +14,7 @@ data HostParserState =
     | AfterDash
     | MidLabel
 
+-- |Efficient domain name parsing based on RFC112 (https://tools.ietf.org/html/rfc1123)
 host :: Parser ByteString
 host = host' AfterDot
     where

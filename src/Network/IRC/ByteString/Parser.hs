@@ -1,15 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Network.IRC.ByteString.Parser
-       ( -- |Parser configuration
-         IRCParserConfig
-         -- |IRC message types
-       , ServerName, IRCMsg(..), UserInfo(..)
-         -- |Conversion functions
-       , toIRCMsg, fromIRCMsg
-         -- |Attoparsec parser
-       , ircLine
-       ) where
+   (
+     -- |IRC message types
+     ServerName, IRCMsg(..), UserInfo(..)
+     -- |Conversion functions
+   , toIRCMsg, fromIRCMsg
+     -- |Attoparsec parser
+   , ircLine
+   ) where
 import Data.Attoparsec.Char8 as Char8
 import qualified Data.Attoparsec.ByteString as Word8
 import Data.ByteString.Char8 as BS

@@ -8,6 +8,5 @@ data IRCParserConfig = IRCParserConfig
     , userParser :: Parser ByteString
     , hostParser :: Parser ByteString
     , paramParser :: Parser ByteString
-    , maxParams :: Maybe Integer
     , isIRCSpace :: Char -> Bool
     }
