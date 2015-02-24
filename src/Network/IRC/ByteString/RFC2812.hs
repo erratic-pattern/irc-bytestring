@@ -32,7 +32,7 @@ import Prelude hiding (takeWhile)
 isIRCSpace = (== ' ')
 
 -- |Tests if a character is a valid channel prefix.
--- '#' and '&' are the only valid channel prefix characters
+-- '#', '&', '+', and '!' are the only valid channel prefix characters
 isChanPrefix c = c == '#' || c  == '+' || c == '!' || c == '&'
 
 -- |Tests is a character is a valid target mask prefix
