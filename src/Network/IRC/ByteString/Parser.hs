@@ -76,7 +76,7 @@ ircSpaces1 c = satisfy (isIRCSpace c)
                <?> "required space"
 
                
-ircLine conf = IRCMsg <$> optional (prefix conf) <*> command <*> params conf <*> trail conf <* skipSpace
+ircLine conf = IRCMsg <$> optional (prefix conf) <*> command <*> params conf <*> trail conf <* optional (string "\r\n")
           <?> "IRC line" 
           
 prefix conf = char ':' 
